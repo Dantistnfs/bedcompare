@@ -44,12 +44,14 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
     let bed_records2 = read_bed_file(file2)?;
 
     let mut genome_length = 0;
-    let mut total_bed_positions = 0;
+    let mut total_bed_positions : u64 = 0;
     let mut same_gene_bp = 0;
     let mut same_regions = 0;
     let mut missing_regions = 0;
     let mut missing_chromosomes = 0;
     let mut number_of_regions = 0;
+    let mut missing_chromosomes_file_1 = String::new();
+    let mut missing_chromosomes_file_2 = String::new();
 
 
     let mut chromosomes : Vec<_> = bed_records1.keys().into_iter().collect();
@@ -68,6 +70,8 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
 
         if records1.len() == 0 {
             missing_chromosomes += 1;
+            missing_chromosomes_file_1.push_str(chromosome);
+            missing_chromosomes_file_1.push(',');
             let nregions = records2.iter().map(|rec| &rec.gene).collect::<HashSet<_>>().len();
             missing_regions += nregions;
             number_of_regions += nregions;
@@ -77,6 +81,8 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
 
         if records2.len() == 0 {
             missing_chromosomes += 1;
+            missing_chromosomes_file_2.push_str(chromosome);
+            missing_chromosomes_file_2.push(',');
             let nregions = records1.iter().map(|rec| &rec.gene).collect::<HashSet<_>>().len();
             missing_regions += nregions;
             number_of_regions += nregions;
@@ -92,10 +98,14 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
         loop {
             let record1 = &records1[pointer1];
             let record2 = &records2[pointer2];
+            //println!("lol kek");
+            //dbg!(current_position);
+            //dbg!(record1);
+            //dbg!(record2);
 
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //   record1.end   record2.end    current_position
-            if record1.end < current_position {
+            if record1.end <= current_position {
                 if pointer1 < records1.len() - 1{
                     pointer1 += 1;
                     continue;
@@ -103,7 +113,7 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
             }
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //   record2.end   record1.end    current_position
-            if record2.end < current_position {
+            if record2.end <= current_position {
                 if pointer2 < records2.len() - 1{
                     pointer2 += 1;
                     continue;
@@ -140,14 +150,14 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //  record1.start              record2.start
             //  current_position ----------^
-            else if current_position >= record1.start && current_position < record2.start {
+            else if (current_position >= record1.start && current_position < record1.end) && current_position < record2.start {
                 total_bed_positions += record2.start - current_position;
                 current_position = record2.start;
             }
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //  record2.start              record1.start
             //  current_position ----------^
-            else if current_position >= record2.start && current_position < record1.start {
+            else if (current_position >= record2.start && current_position < record2.end) && current_position < record1.start {
                 total_bed_positions += record1.start - current_position;
                 current_position = record1.start;
             }
@@ -168,17 +178,38 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
             }
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //  record1.end              record2.end
-            //  current_position --------^
-            else if current_position >= record1.end && current_position < record2.end {
+            //  current_position ----^
+            else if current_position >= record1.end && current_position < record2.end && current_position >= record1.start {
                 total_bed_positions += record2.end - current_position;
                 current_position = record2.end;
             }
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //  record2.end              record1.end
-            //  current_position --------^
-            else if current_position >= record2.end && current_position < record1.end {
+            //  current_position ----^
+            else if current_position >= record2.end && current_position < record1.end && current_position >= record1.start {
                 total_bed_positions += record1.end - current_position;
                 current_position = record1.end;
+            }
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            //  record1.start record2.start record1.end record2.end
+            //                                  current_position-----^
+            else if (current_position >= record1.start && current_position >= record2.start) &&
+                    (current_position > record1.end && current_position > record2.end) {
+                current_position = record1.start.min(record2.start);
+            }
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            //  record1.start record1.end    record2.start record2.end
+            //       current_position-----^
+            else if (current_position >= record1.start && current_position >= record1.end) &&
+                    (current_position <= record2.start && current_position <= record2.end){
+                current_position = record2.start;
+            }
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            //  record2.start record2.end    record1.start record1.end
+            //       current_position-----^
+            else if (current_position >= record2.start && current_position >= record2.end) &&
+                    (current_position <= record1.start && current_position <= record1.end){
+                current_position = record1.start;
             }
 
             continue;
@@ -190,14 +221,16 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
     
     if json_output {
         let mut output = HashMap::new();
-        output.insert("genome_length", genome_length as f64);
-        output.insert("bed_regions_length", total_bed_positions as f64);
-        output.insert("bed_number_of_regions", number_of_regions as f64);
-        output.insert("same_regions", same_regions as f64);
-        output.insert("same_regions_length", same_gene_bp as f64);
-        output.insert("same_regions_length_percent", same_region_bp_percent as f64);
-        output.insert("missing_chromosomes", missing_chromosomes as f64);
-        output.insert("missing_regions", missing_regions as f64);
+        output.insert("genome_length", format!("{}", genome_length as f64));
+        output.insert("bed_regions_length", format!("{}", total_bed_positions as f64));
+        output.insert("bed_number_of_regions", format!("{}", number_of_regions as f64));
+        output.insert("same_regions", format!("{}", same_regions as f64));
+        output.insert("same_regions_length", format!("{}", same_gene_bp as f64));
+        output.insert("same_regions_length_percent", format!("{}", same_region_bp_percent as f64));
+        output.insert("missing_chromosomes", format!("{}", missing_chromosomes as f64));
+        output.insert("missing_regions", format!("{}", missing_regions as f64));
+        output.insert("missing_chromosomes_file_1", missing_chromosomes_file_1);
+        output.insert("missing_chromosomes_file_2", missing_chromosomes_file_2);
         println!("{}", serde_json::to_string(&output).unwrap());
     }
     else {
