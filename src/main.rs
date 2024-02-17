@@ -76,6 +76,7 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
             missing_regions += nregions;
             number_of_regions += nregions;
             total_bed_positions += records2.iter().map(|rec| rec.end.abs_diff(rec.start)).sum::<u64>();
+            
             continue;
         }
 
@@ -150,14 +151,14 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //  record1.start              record2.start
             //  current_position ----------^
-            else if (current_position >= record1.start && current_position < record1.end) && current_position < record2.start {
+            else if (current_position >= record1.start && current_position < record1.end) && (current_position < record2.start) && (record1.end > record2.start) {
                 total_bed_positions += record2.start - current_position;
                 current_position = record2.start;
             }
             // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //  record2.start              record1.start
             //  current_position ----------^
-            else if (current_position >= record2.start && current_position < record2.end) && current_position < record1.start {
+            else if (current_position >= record2.start && current_position < record2.end) && (current_position < record1.start) && (record2.end > record1.start) {
                 total_bed_positions += record1.start - current_position;
                 current_position = record1.start;
             }
@@ -204,12 +205,28 @@ fn compare_genomic_files(file1: &str, file2: &str, json_output: bool) -> Result<
                     (current_position <= record2.start && current_position <= record2.end){
                 current_position = record2.start;
             }
-            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>start>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             //  record2.start record2.end    record1.start record1.end
             //       current_position-----^
             else if (current_position >= record2.start && current_position >= record2.end) &&
                     (current_position <= record1.start && current_position <= record1.end){
                 current_position = record1.start;
+            }
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            //  record1.start   record1.end  record2.start record2.end
+            //  current_position-----^
+            else if (current_position >= record1.start && current_position <= record1.end) &&
+                    (current_position <= record2.start && current_position <= record2.end){
+                total_bed_positions += record1.end - current_position;
+                current_position = record1.end;
+            }
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            //  record2.start   record2.end  record1.start record1.end
+            //  current_position-^
+            else if (current_position >= record2.start && current_position <= record2.end) &&
+                    (current_position <= record1.start && current_position <= record1.end){
+                total_bed_positions += record2.end - current_position;
+                current_position = record2.end;
             }
 
             continue;

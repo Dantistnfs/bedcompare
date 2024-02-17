@@ -1,6 +1,6 @@
 [package]
 name = "bedcompare"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Stanislav Zubenko <5831286+Dantistnfs@users.noreply.github.com>"]
 
